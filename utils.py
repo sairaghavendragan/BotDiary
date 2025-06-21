@@ -26,10 +26,6 @@ def reminder_input(input_text):
 
     return parsed_datetime,reminder_message
 
-    print(f"Input: {input_text}")
-    print(f"Parsed time phrase: {time_str}")
-    print(f"Datetime (tz-aware): {parsed_datetime}")
-    print(f"Reminder message: {reminder_message}")
-    print("-" * 40)
+    
 
  

@@ -6,18 +6,12 @@ import datetime
 from dateutil.parser import parse
 from dateparser.search import search_dates
 import scheduler
-import pytz
-import os
-from dotenv import load_dotenv
+import pytz 
 import utils
 
-load_dotenv()
-TIMEZONE = os.getenv('TIMEZONE')    
-try:
-    tz = pytz.timezone(TIMEZONE)
-except pytz.exceptions.UnknownTimeZoneError:
-    raise ValueError(f"Invalid TIMEZONE: {TIMEZONE}")
-
+ 
+TIMEZONE = utils.TIMEZONE 
+tz = utils.tz
 async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id 
     content = update.message.text
@@ -27,6 +21,15 @@ async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     db.log_message(user_id, content)
 
     await update.message.reply_text('Saved to your journal!')
+
+'''
+    This asynchronous function handles any incoming text message that is not recognized as a command.
+    It retrieves the chat ID and message content from the update.
+    It interacts with the database to get or create the user associated with the chat and logs the message content.
+    Finally, it sends a confirmation message back to the user using `await update.message.reply_text()`.
+    The database interactions (`db.get_or_create_user`, `db.log_message`) are synchronous blocking calls 
+    but are quick enough not to significantly block the event loop in typical scenarios.
+'''    
 
 async def show_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
@@ -64,6 +67,18 @@ async def show_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     escaped_response = escape_markdown(response_text,version=2)
     await update.message.reply_text(escaped_response,parse_mode='MarkdownV2')  
 
+'''
+    This asynchronous function handles the `/logs` command.
+    It retrieves the user's chat ID, gets the user in the database, and fetches log messages for the current day.
+    It then formats the retrieved log messages into a human-readable string, a
+    ttempting to parse and localize timestamps to the configured timezone.
+    It handles cases where no logs are found.
+    Finally, it escapes the resulting text for MarkdownV2 compatibility and
+      sends it back to the user using `await update.message.reply_text()` with `parse_mode='MarkdownV2'`.
+    It includes error handling for parsing timestamp strings from the database.
+'''
+
+
 async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     user_id = db.get_or_create_user(chat_id)
@@ -79,10 +94,9 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             parse_mode='Markdown' )    
         return
     
-    time_string = ""
+     
     reminder_message = ""
-    parsed_datetime = None
-    message_start_index = 0
+    parsed_datetime = None 
 
 
     full_input_text = " ".join(command_args) 
@@ -116,3 +130,17 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     reminder_id = db.set_reminder(user_id, reminder_message, parsed_datetime)
     scheduler.schedule_reminder(context.bot,reminder_id, chat_id, reminder_message, parsed_datetime)
     await update.message.reply_text(f"Reminder {reminder_message} set for {parsed_datetime.strftime('%Y-%m-%d %H:%M')}.")
+'''
+   -- This asynchronous function handles the `/remind` command.
+   -- It retrieves the user's chat ID and command arguments.
+   -- It validates if arguments are provided and calls `utils.reminder_input` 
+      to parse the input string into a datetime and the reminder message.
+   -- It performs error handling if parsing fails or no message content is found, providing usage instructions.
+   -- It ensures the parsed datetime is timezone-aware and converts it to the configured timezone (`tz`).
+   -- It checks if the reminder time is in the future, providing an error if it's in the past or too soon.
+   -- If the input is valid, it saves the reminder to the database using `db.set_reminder` to get a unique ID.
+   -- It then schedules the reminder job using `scheduler.schedule_reminder`,
+     passing the bot instance (`context.bot`) and the reminder details.
+   -- Finally, it sends a confirmation message back to the user using `await update.message.reply_text()`.
+     
+'''    
