@@ -19,13 +19,23 @@ def reminder_input(input_text):
 
     if not results:
         print("No date/time found in:", input_text)
-        return
+        return None,""
 
     time_str, parsed_datetime = results[0]
     reminder_message = input_text.replace(time_str, "").strip()
+     
 
     return parsed_datetime,reminder_message
 
+def  normalize_timestamp(timestamp ) -> datetime:
+    """ 
+    If already aware, it converts it to the app's timezone.
+    """
+     
     
+    if timestamp.tzinfo is None:
+        return tz.localize(timestamp)
+    else:
+        return timestamp.astimezone(tz)    
 
  

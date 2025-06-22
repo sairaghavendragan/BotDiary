@@ -2,7 +2,7 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
 import datetime
-import pytz
+ 
 import db
  
 import asyncio
@@ -22,13 +22,33 @@ scheduler = AsyncIOScheduler(timezone=tz)
     """
     print(f"Scheduler setup complete in timezone: {datetime.datetime.now(tz).strftime('%Z')}")'''
 
+async def setup_scheduler_jobs(bot):  
+    """
+    Sets up initial scheduler jobs (like loading active reminders from DB on startup).
+    The scheduler instance itself (scheduler.scheduler) will be started by the
+    application's run_polling method after being attached to the application.
+    """
+    print(f"Scheduler setup complete in timezone: {datetime.datetime.now(tz).strftime('%Z')}")
+    active_reminders = db.get_active_reminders()
+    for reminder in active_reminders:
+        time_stamp = datetime.datetime.fromisoformat(reminder['timestamp'])
+        time_stamp = utils.normalize_timestamp(time_stamp)
+        now_tz_aware = datetime.datetime.now(tz)
+        if time_stamp <= now_tz_aware + datetime.timedelta(seconds=5):
+            print(f"Reminder couldnt reach you because bot was inactive.remindercontent: {reminder['content']}")
+            await bot.send_message(
+                                        chat_id=reminder['chat_id'],
+                                        text=f"⚠️ Missed Reminder: {reminder['content']}\n(Bot was inactive at the scheduled time: {time_stamp.strftime('%Y-%m-%d %H:%M:%S %Z')})",
+                                        parse_mode='Markdown'
+                                    )
+            db.deactivate_reminder(reminder['id'])
+            continue
+        schedule_reminder(bot,reminder['id'], reminder['chat_id'], reminder['content'], time_stamp)
+
 def schedule_reminder(bot,reminder_id, chat_id, content, timestamp: datetime.datetime):
     job_id = f'reminder_{reminder_id}'
-    if timestamp.tzinfo is None: 
-        timestamp = tz.localize(timestamp)
-        print(f"Warning: Naive datetime provided for reminder {reminder_id}. Assuming timezone {TIMEZONE}.")
-    else: 
-        timestamp = timestamp.astimezone(tz) 
+    
+     
         
     scheduler.add_job(
         send_reminder,          # The function to run

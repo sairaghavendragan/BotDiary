@@ -27,7 +27,7 @@ def init_db():
                 (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal reminder ID)
                 user_id INTEGER NOT NULL, -- Foreign key referencing the user table
                 content TEXT NOT NULL, -- The content of the reminder
-                timestamp DATETIME NOT NULL, -- when to send the reminder
+                timestamp TEXT NOT NULL, -- when to send the reminder
                 is_active BOOLEAN DEFAULT TRUE,-- whether the reminder is active
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE -- Foreign key constraint
                 );''')
@@ -107,14 +107,21 @@ def deactivate_reminder(reminder_id):
 
     print(f"Reminder {reminder_id} deactivated.")
 
-'''def get_active_reminders(user_id):
+def get_active_reminders( ):
     conn = sqlite3.connect(DB_NAME)
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    cursor.execute("SELECT id, content, timestamp FROM reminders WHERE user_id = ? AND is_active = TRUE", (user_id,))
+    cursor.execute("""
+        SELECT r.id, u.telegram_chat_id AS chat_id, r.content, r.timestamp
+        FROM reminders r
+        JOIN users u ON r.user_id = u.id
+        WHERE r.is_active = TRUE
+        ORDER BY r.timestamp
+    """)
     active_reminders = cursor.fetchall()
 
     conn.close()
 
-    return active_reminders'''
+    return active_reminders 

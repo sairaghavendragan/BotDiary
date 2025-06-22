@@ -113,13 +113,7 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
      
-    if parsed_datetime.tzinfo is None:
-        # Assume naive datetime is in the configured TIMEZONE
-        parsed_datetime = tz.localize(parsed_datetime)
-    else:
-        # If timezone-aware, convert it to our configured TIMEZONE
-        parsed_datetime = parsed_datetime.astimezone(tz)
-
+    parsed_datetime = utils.normalize_timestamp(parsed_datetime)
     # Ensure the reminder is in the future (give a small grace period, e.g., 5 seconds)
     now_tz_aware = datetime.datetime.now(tz)
     if parsed_datetime <= now_tz_aware + datetime.timedelta(seconds=5):

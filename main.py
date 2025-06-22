@@ -41,6 +41,7 @@ async def post_init_callback(application: Application) -> None:
         # Start the AsyncIOScheduler within the bot's event loop
         scheduler.scheduler.start()
         print("Scheduler started and integrated with asyncio loop.")
+        await scheduler.setup_scheduler_jobs(application.bot)
         print("Post-initialization complete.")
 
     except Exception as e:
