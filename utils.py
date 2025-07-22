@@ -14,7 +14,7 @@ def reminder_input(input_text):
     'TIMEZONE': TIMEZONE,
     'RETURN_AS_TIMEZONE_AWARE': True,
     'PREFER_DATES_FROM': 'future',
-    'RELATIVE_BASE': now
+    'RELATIVE_BASE': datetime.datetime.now(tz)
 })
 
     if not results:
@@ -26,6 +26,21 @@ def reminder_input(input_text):
      
 
     return parsed_datetime,reminder_message
+
+def parse_datetime(input_text):
+    results = search_dates(input_text, settings={
+    'TIMEZONE': TIMEZONE,
+    'RETURN_AS_TIMEZONE_AWARE': True,
+    'PREFER_DATES_FROM': 'past',
+    'RELATIVE_BASE': datetime.datetime.now(tz)
+})
+
+    if not results:
+        print("No date/time found in:", input_text)
+        return None
+
+    _, parsed_datetime = results[0]
+    return parsed_datetime
 
 def  normalize_timestamp(timestamp ) -> datetime:
     """ 

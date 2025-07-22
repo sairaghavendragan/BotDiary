@@ -138,3 +138,30 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
    -- Finally, it sends a confirmation message back to the user using `await update.message.reply_text()`.
      
 '''    
+
+async def get_specific_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id  = update.message.chat_id
+    user_id = db.get_or_create_user(chat_id)
+    command_args = context.args
+    if not command_args:
+        await update.message.reply_text("Usage: `/summary [date]`\n\n"
+            "Examples:\n"
+            "`/summary 2025-10-27`\n" 
+            "`/summary yesterday`\n " 
+            "`/summary 23 july 2025`", 
+            parse_mode='Markdown' )    
+        return
+    input_txt = " ".join(command_args)
+    date = utils.parse_datetime(input_txt)
+    if date is None:
+        await update.message.reply_text("Invalid date format. Please use one of the following formats:\n"
+            "`/summary 2025-10-27`\n" 
+            "`/summary yesterday`\n " 
+            "`/summary 23 july 2025`" ,
+            parse_mode='Markdown' )    
+        return
+    summary = db.get_summary_for_user(user_id, date.date())
+    if summary is None:
+        await update.message.reply_text(f"No summary found for the specified date.{date.strftime('%Y-%m-%d')}")
+        return 
+    await update.message.reply_text(summary['content'],parse_mode='Markdown')

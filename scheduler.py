@@ -1,9 +1,11 @@
 #from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.date import DateTrigger
+from apscheduler.triggers.cron import CronTrigger
 import datetime
  
 import db
+import gemini_client
  
 import asyncio
 import utils
@@ -28,7 +30,7 @@ async def setup_scheduler_jobs(bot):
     The scheduler instance itself (scheduler.scheduler) will be started by the
     application's run_polling method after being attached to the application.
     """
-    print(f"Scheduler setup complete in timezone: {datetime.datetime.now(tz).strftime('%Z')}")
+     
     active_reminders = db.get_active_reminders()
     for reminder in active_reminders:
         time_stamp = datetime.datetime.fromisoformat(reminder['timestamp'])
@@ -44,6 +46,12 @@ async def setup_scheduler_jobs(bot):
             db.deactivate_reminder(reminder['id'])
             continue
         schedule_reminder(bot,reminder['id'], reminder['chat_id'], reminder['content'], time_stamp)
+    users = db.get_all_users()
+    for user in users:
+        schedule_daily_summary_job(bot, user['id'], user['telegram_chat_id'],hour=2, minute=0)   
+
+    print(f"Scheduler setup complete in timezone: {datetime.datetime.now(tz).strftime('%Z')}")
+
 
 def schedule_reminder(bot,reminder_id, chat_id, content, timestamp: datetime.datetime):
     job_id = f'reminder_{reminder_id}'
@@ -87,3 +95,53 @@ async def send_reminder(bot, reminder_id, chat_id, content):
         Finally, it calls `db.deactivate_reminder` to mark the reminder as complete in the database, 
         regardless of message delivery success 
 '''    
+
+def schedule_daily_summary_job(bot, user_id, chat_id, hour, minute):
+    job_id = f'daily_summary_{user_id}'
+    scheduler.add_job(
+        send_summary,          # The function to run
+        CronTrigger(hour=hour, minute=minute,timezone=tz), # Run once at midnight
+        args=[bot, user_id, chat_id], # Arguments to pass to send_summary
+        id=job_id,              # Unique ID for the job
+        replace_existing=True   # Replace if a job with the same ID already exists (shouldn't happen with unique DB IDs)
+    )
+    print(f"Summary scheduled for user ID: {user_id}")
+
+async def send_summary(bot, user_id, chat_id):
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    yesterday_str = yesterday.strftime('%Y-%m-%d') 
+    #today = datetime.date.today()
+    #today_str = today.strftime('%Y-%m-%d')
+    logs = db.get_messages_for_day(user_id, yesterday_str)
+    #test_logs = db.get_messages_for_day(user_id, today_str)
+    #logs = test_logs 
+     
+
+    if not logs :
+        
+        await bot.send_message(chat_id=chat_id, text=f"📅 No logs found for today: {yesterday_str} . No summary generated" )
+    logs_txt = ""
+    for timestamp, content in logs:
+        try:
+            ts_obj = datetime.datetime.fromisoformat(timestamp)
+            if ts_obj.tzinfo is None:
+                ts_obj = utils.tz.localize(ts_obj)  # Localize to UTC if naive datetime
+            else:
+                ts_obj = ts_obj.astimezone(tz)
+            time_str = ts_obj.strftime('%H:%M')
+        except ValueError:
+            time_str = timestamp
+
+        logs_txt += f"- {time_str}: {content}\n"    
+    summary_prompt = gemini_client.get_summary_prompt(logs, yesterday_str)
+    summary = await gemini_client.get_summary(summary_prompt)
+    if summary == "No content generated.":
+        await bot.send_message(chat_id=chat_id, text=f"Gemini couldnt generate a summary . No summary generated" )
+        return
+    db.add_summary(user_id, summary, yesterday)
+
+    try:
+        await bot.send_message(chat_id=chat_id, text=f"📅 **Summary for {yesterday_str}:**\n\n{summary}", parse_mode='Markdown')
+    except Exception as e:
+        print(f"Error sending summary to {chat_id}: {e}")
+         

@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import datetime
+import json
 
 DB_NAME = 'database.db'
  
@@ -11,7 +12,9 @@ def init_db():
 
     cursor.execute('''CREATE TABLE IF NOT EXISTS users
                 (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal user ID)
-            telegram_chat_id INTEGER UNIQUE NOT NULL  -- Telegram's chat ID
+            telegram_chat_id INTEGER UNIQUE NOT NULL   -- Telegram's chat ID
+                    
+                   
             -- We'll add daily_summary_time and other settings here later
             );''')
     
@@ -32,6 +35,39 @@ def init_db():
                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE -- Foreign key constraint
                 );''')
 
+    cursor.execute('''CREATE TABLE IF NOT EXISTS summaries
+                (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal summary ID)
+                user_id INTEGER NOT NULL, -- Foreign key referencing the user table
+                content TEXT NOT NULL, -- The content of the summary
+                date DATE NOT NULL, -- The date of the summary
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, -- The timestamp of the summary
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, -- Foreign key constraint
+                UNIQUE(user_id, date) -- Ensure there's only one summary per user and date
+                   
+                );''')
+    # creating todo table. Should have is_active column to track if task is done or not
+# -- Temporarily disabled: 'todo' table creation --
+# cursor.execute('''CREATE TABLE IF NOT EXISTS todo
+#                 (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal todo ID)
+#                 user_id INTEGER NOT NULL, -- Foreign key referencing the user table 
+#                 content TEXT NOT NULL, -- json of list of todos
+#                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, -- The timestamp of the last todo update
+#                 is_active BOOLEAN DEFAULT TRUE,-- whether the reminder to send todo is active
+#                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE  -- Foreign key constraint
+#                 );''')
+
+# -- Temporarily disabled: 'sleep_logs' table creation --
+# cursor.execute('''CREATE TABLE IF NOT EXISTS sleep_logs
+#                 (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal sleep log ID)
+#                 user_id INTEGER NOT NULL, -- Foreign key referencing the user table
+#                 date  DATE NOT NULL, -- The date of the sleep session   
+#                 sleep_start DATETIME NOT NULL, -- The start time of the sleep session
+#                 sleep_end DATETIME DEFAULT NULL, -- The end time of the sleep session
+#                 sleep_duration TEXT DEFAULT NULL, -- The duration of the sleep session
+#                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE -- Foreign key constraint
+#                 );''')
+
+    
     conn.commit()
     conn.close()
 
@@ -125,3 +161,153 @@ def get_active_reminders( ):
     conn.close()
 
     return active_reminders 
+
+def add_summary(user_id, content, date):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO summaries (user_id, content, date) VALUES (?, ?, ?)", (user_id, content, date.isoformat()))
+        conn.commit()
+        print(f"Summary added for user ID: {user_id}")
+    except sqlite3.IntegrityError:
+        print(f"Summary already exists for user ID: {user_id}")
+        conn.rollback()
+    finally:
+
+        conn.close()
+
+    
+
+def get_all_users():
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor() 
+
+    cursor.execute("SELECT id, telegram_chat_id FROM users")
+    users = cursor.fetchall()
+
+    conn.close() 
+
+    return users   
+
+def get_summary_for_user(user_id, date):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT content FROM summaries WHERE user_id = ? AND date = ?", (user_id, date.isoformat()))
+    summary = cursor.fetchone()
+
+    conn.close()
+
+    return summary
+'''
+def add_todo(user_id, content):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    cursor = conn.cursor()
+
+    cursor.execute("INSERT INTO todo (user_id, content) VALUES (?, ?)", (user_id, content))
+    conn.commit()
+    return cursor.lastrowid
+
+    conn.close() 
+
+def get_todos_for_user(user_id,date): 
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT  id, content, is_active FROM todo WHERE user_id = ? AND DATE(timestamp) = ? ORDER BY timestamp ", (user_id,date))
+    todos = cursor.fetchall()
+
+    conn.close()
+
+    return todos
+
+def mark_todo_done(todo_id,new_value):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    cursor = conn.cursor()
+
+    cursor.execute("UPDATE todo SET is_active = ? WHERE id = ?", (new_value, todo_id))
+    conn.commit()
+
+    conn.close()
+
+    print(f"Todo {todo_id} marked as done.")
+    return new_value
+
+def delete_todo(todo_id):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM todo WHERE id = ?", (todo_id,))
+    conn.commit()
+
+    conn.close()
+
+    print(f"Todo {todo_id} deleted.")
+
+def log_sleep_start(user_id,timestamp):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    cursor = conn.cursor()
+
+    cursor.execute("INSERT INTO sleep (user_id, start_time) VALUES (?, ?)", (user_id, timestamp.isoformat()))
+    id = cursor.lastrowid
+    cursor.execute("UPDATE sleep SET date = DATE(start_time) WHERE id = ?", (id,))
+     
+    conn.commit()
+
+    conn.close()
+
+def log_sleep_end(sleep_id, timestamp):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    cursor = conn.cursor()
+
+    cursor.execute("UPDATE sleep SET end_time = ? WHERE id = ?", (timestamp.isoformat(), sleep_id))
+    cursor.execute("UPDATE sleep SET duration = end_time - start_time WHERE id = ?", (sleep_id,))
+ 
+    conn.commit()
+
+    conn.close()
+
+    print(f"Sleep {sleep_id} logged.")
+
+def get_sleeps_where_not_ended(user_id):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    #fetch not ended sleeps for last three days
+    cursor.execute("SELECT * FROM sleep WHERE user_id = ? AND end_time IS NULL ORDER BY start_time DESC LIMIT 3", (user_id,))
+    
+    sleeps = cursor.fetchall ()
+
+    conn.close()
+
+    return sleeps
+
+def get_sleeplogs_for_day(user_id,date):
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM sleep WHERE user_id = ? AND DATE(start_time) = ? ORDER BY start_time ", (user_id,date.isoformat()))
+    sleeps = cursor.fetchall()
+
+    conn.close()
+
+    return sleeps
+
+
+
+ '''

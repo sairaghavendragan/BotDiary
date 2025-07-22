@@ -74,6 +74,7 @@ def main() -> None:
     application.add_handler(logs_handler) 
     application.add_handler(CommandHandler('remind', handlers.set_reminder)) 
     application.add_handler(message_handler) 
+    application.add_handler(CommandHandler('summary', handlers.get_specific_summary))
     print("Bot application built. Starting polling...")
 
      
