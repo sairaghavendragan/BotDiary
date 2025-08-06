@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update,InlineKeyboardButton,InlineKeyboardMarkup 
 from telegram.ext import ContextTypes
 from telegram.helpers import escape_markdown
 import db
@@ -165,3 +165,117 @@ async def get_specific_summary(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(f"No summary found for the specified date.{date.strftime('%Y-%m-%d')}")
         return 
     await update.message.reply_text(summary['content'],parse_mode='Markdown')
+
+async def add_new_todo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.message.chat_id
+    user_id = db.get_or_create_user(chat_id)
+    command_args = context.args
+    if not command_args:
+        await update.message.reply_text("Usage: `/todo [task]`\n\n"
+            "Examples:\n"
+            "`/todo Buy milk`\n" 
+            "`/todo Call Mom`\n " 
+            "`/todo Project deadline`", 
+            parse_mode='Markdown' )    
+        return
+    todo = " ".join(command_args)
+    todo = utils.escape_markdown_v1(todo)
+    todo_id = db.add_todo(user_id, todo)
+    await update.message.reply_text(f"Todo {todo_id} added: {todo}",parse_mode='Markdown') 
+     
+
+def _get_formatted_todos_content(user_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
+    """
+    Generates the formatted TODO list message and its inline keyboard.
+    Returns a tuple: (message_text: str, reply_markup: InlineKeyboardMarkup | None)
+    """
+    today = datetime.date.today()
+    today_str = today.strftime('%Y-%m-%d')
+    todos = db.get_todos_for_user(user_id, today_str)  
+    response_text = f"📝 *Your TODOs for Today ({today.strftime('%Y-%m-%d')}):*\n\n"
+    keyboard =[]
+    if not todos:
+        response_text += "No TODOs found for today. Use `/todo` to add a new TODO."
+    else:  
+        for todo in todos:
+            status_emoji = "✅" if todo['is_done'] else "❌"
+            task_display = todo['content'] 
+             
+            response_text += f"{status_emoji} {task_display} "
+            buttons = []
+            if not todo['is_done']:
+                buttons.append(InlineKeyboardButton("✅ Done", callback_data=f"done:{todo['id']}"))
+            else :
+                buttons.append(InlineKeyboardButton("↩️ Undo", callback_data=f"undone:{todo['id']}"))    
+            buttons.append(InlineKeyboardButton("Delete", callback_data=f"delete:{todo['id']}"))
+            keyboard.append(buttons)
+            response_text += "\n\n"
+
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
+    return response_text, reply_markup
+
+
+
+
+async def _send_or_edit_todos(update: Update,context: ContextTypes.DEFAULT_TYPE, message_id: int=None) -> None:
+     
+    if update.message:
+        chat_id = update.message.chat_id
+    else:
+        chat_id = update.callback_query.message.chat.id    
+    user_id = db.get_or_create_user(chat_id)
+
+    response_text, reply_markup = _get_formatted_todos_content(user_id)
+    if message_id:
+        await context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=message_id,
+            text=response_text,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            text=response_text,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+async def show_daily_todos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+     
+     
+    await _send_or_edit_todos(update, context)        
+
+async def handle_todo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer() # Acknowledge the callback query
+
+    callback_data = query.data
+    chat_id = query.message.chat_id
+    message_id = query.message.message_id
+    user_id = db.get_or_create_user(chat_id) # Ensure user exists
+
+    # Callback data format: "todo_[action]_[todo_id]"
+    parts = callback_data.split(':')
+    if len(parts) != 2:
+        print(f"Invalid callback data: {callback_data}")
+        return
+
+     
+     
+
+    action = parts[0]
+    todo_id = int(parts[1])
+
+    if action == 'done':
+        db.mark_todo_done(todo_id, True)
+    elif action == 'undone':
+        db.mark_todo_done(todo_id, False)
+    elif action == 'delete':
+        db.delete_todo(todo_id)
+    else:
+        print(f"Unknown TODO action: {action}")
+        return
+
+    # After modification, re-render the TODO list by editing the original message
+    await _send_or_edit_todos(update,context, message_id)

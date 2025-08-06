@@ -6,6 +6,7 @@ import datetime
  
 import db
 import gemini_client
+import handlers
  
 import asyncio
 import utils
@@ -49,6 +50,7 @@ async def setup_scheduler_jobs(bot):
     users = db.get_all_users()
     for user in users:
         schedule_daily_summary_job(bot, user['id'], user['telegram_chat_id'],hour=2, minute=0)   
+        schedule_hourly_checkin_job(bot, user['id'], user['telegram_chat_id'],start_hour=6, end_hour=23)
 
     print(f"Scheduler setup complete in timezone: {datetime.datetime.now(tz).strftime('%Z')}")
 
@@ -133,7 +135,7 @@ async def send_summary(bot, user_id, chat_id):
             time_str = timestamp
 
         logs_txt += f"- {time_str}: {content}\n"    
-    summary_prompt = gemini_client.get_summary_prompt(logs, yesterday_str)
+    summary_prompt = gemini_client.get_summary_prompt(logs_txt, yesterday_str)
     summary = await gemini_client.get_summary(summary_prompt)
     if summary == "No content generated.":
         await bot.send_message(chat_id=chat_id, text=f"Gemini couldnt generate a summary . No summary generated" )
@@ -145,3 +147,41 @@ async def send_summary(bot, user_id, chat_id):
     except Exception as e:
         print(f"Error sending summary to {chat_id}: {e}")
          
+
+def schedule_hourly_checkin_job(bot, user_id, chat_id, start_hour, end_hour ):
+    job_id = f'hourly_checkin_{user_id}'
+    if end_hour >= start_hour:
+        hours = f'{start_hour}-{end_hour}'
+    else:
+        # e.g., start_hour=6, end_hour=2 -> '6-23,0-2'
+        hours = f'{start_hour}-23,0-{end_hour}'         
+    scheduler.add_job(
+        send_hourly_checkin,          # The function to run
+        CronTrigger(hour=hours,minute=0, timezone=tz), # Run once at midnight
+        args=[bot, user_id, chat_id], # Arguments to pass to send_summary
+        id=job_id,              # Unique ID for the job
+        replace_existing=True   # Replace if a job with the same ID already exists (shouldn't happen with unique DB IDs)
+    )
+    print(f"Hourly checkin scheduled for user ID: {user_id}")
+
+async def send_hourly_checkin(bot, user_id, chat_id):
+    greeting = "Hey there! 👋 Whatcha doing?"
+    
+     
+    todo_list_text, todo_list_markup = handlers._get_formatted_todos_content(user_id)
+
+     
+
+    
+    try:
+        await bot.send_message(chat_id=chat_id, text=greeting, parse_mode='Markdown')
+        await bot.send_message(
+            chat_id=chat_id,
+            text=todo_list_text,
+            reply_markup=todo_list_markup, # Include the inline keyboard if there are todos
+            parse_mode='Markdown'
+        )
+        print(f"Hourly check-in sent to {chat_id}")
+    except Exception as e:
+        print(f"Error sending hourly check-in to {chat_id}: {e}")
+    

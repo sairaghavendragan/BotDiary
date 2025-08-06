@@ -52,5 +52,10 @@ def  normalize_timestamp(timestamp ) -> datetime:
         return tz.localize(timestamp)
     else:
         return timestamp.astimezone(tz)    
+    
+def escape_markdown_v1(text: str) -> str:
+    for ch in ['_', '*', '`', '[']:
+        text = text.replace(ch, f'\\{ch}')
+    return text    
 
  

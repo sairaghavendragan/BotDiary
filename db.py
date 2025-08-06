@@ -2,6 +2,7 @@ import sqlite3
 import os
 import datetime
 import json
+import pytz
 
 DB_NAME = 'database.db'
  
@@ -46,26 +47,24 @@ def init_db():
                    
                 );''')
     # creating todo table. Should have is_active column to track if task is done or not
-# -- Temporarily disabled: 'todo' table creation --
-# cursor.execute('''CREATE TABLE IF NOT EXISTS todo
-#                 (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal todo ID)
-#                 user_id INTEGER NOT NULL, -- Foreign key referencing the user table 
-#                 content TEXT NOT NULL, -- json of list of todos
-#                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, -- The timestamp of the last todo update
-#                 is_active BOOLEAN DEFAULT TRUE,-- whether the reminder to send todo is active
-#                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE  -- Foreign key constraint
-#                 );''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS todo
+                (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal todo ID)
+                user_id INTEGER NOT NULL, -- Foreign key referencing the user table 
+                content TEXT NOT NULL, -- The content of the todo item
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP, -- The timestamp of the last todo update
+                is_done BOOLEAN DEFAULT FALSE,-- whether the todo was completed
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE  -- Foreign key constraint
+                );''')
 
-# -- Temporarily disabled: 'sleep_logs' table creation --
-# cursor.execute('''CREATE TABLE IF NOT EXISTS sleep_logs
-#                 (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal sleep log ID)
-#                 user_id INTEGER NOT NULL, -- Foreign key referencing the user table
-#                 date  DATE NOT NULL, -- The date of the sleep session   
-#                 sleep_start DATETIME NOT NULL, -- The start time of the sleep session
-#                 sleep_end DATETIME DEFAULT NULL, -- The end time of the sleep session
-#                 sleep_duration TEXT DEFAULT NULL, -- The duration of the sleep session
-#                 FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE -- Foreign key constraint
-#                 );''')
+ #   cursor.execute('''CREATE TABLE IF NOT EXISTS sleep
+ #               (id INTEGER PRIMARY KEY, -- Auto-incrementing primary key (internal sleep log ID)
+ #               user_id INTEGER NOT NULL, -- Foreign key referencing the user table
+#                date  DATE NOT NULL, -- The date of the sleep session   
+ #               sleep_start DATETIME NOT NULL, -- The start time of the sleep session
+ #               sleep_end DATETIME DEFAULT NULL, -- The end time of the sleep session
+ #               sleep_duration TEXT DEFAULT NULL, -- The duration of the sleep session
+ #               FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE -- Foreign key constraint
+ #               );''')
 
     
     conn.commit()
@@ -204,17 +203,19 @@ def get_summary_for_user(user_id, date):
     conn.close()
 
     return summary
-'''
+
 def add_todo(user_id, content):
     conn = sqlite3.connect(DB_NAME)
     conn.execute("PRAGMA foreign_keys = ON")
     cursor = conn.cursor()
 
     cursor.execute("INSERT INTO todo (user_id, content) VALUES (?, ?)", (user_id, content))
+    todo_id = cursor.lastrowid
     conn.commit()
-    return cursor.lastrowid
-
     conn.close() 
+    return todo_id
+
+    
 
 def get_todos_for_user(user_id,date): 
     conn = sqlite3.connect(DB_NAME)
@@ -222,7 +223,7 @@ def get_todos_for_user(user_id,date):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    cursor.execute("SELECT  id, content, is_active FROM todo WHERE user_id = ? AND DATE(timestamp) = ? ORDER BY timestamp ", (user_id,date))
+    cursor.execute("SELECT  id, content, is_done FROM todo WHERE user_id = ? AND DATE(timestamp) = ? ORDER BY timestamp ", (user_id,date))
     todos = cursor.fetchall()
 
     conn.close()
@@ -234,7 +235,7 @@ def mark_todo_done(todo_id,new_value):
     conn.execute("PRAGMA foreign_keys = ON")
     cursor = conn.cursor()
 
-    cursor.execute("UPDATE todo SET is_active = ? WHERE id = ?", (new_value, todo_id))
+    cursor.execute("UPDATE todo SET is_done = ? WHERE id = ?", (new_value, todo_id))
     conn.commit()
 
     conn.close()
@@ -254,7 +255,7 @@ def delete_todo(todo_id):
 
     print(f"Todo {todo_id} deleted.")
 
-def log_sleep_start(user_id,timestamp):
+'''def log_sleep_start(user_id,timestamp):
     conn = sqlite3.connect(DB_NAME)
     conn.execute("PRAGMA foreign_keys = ON")
     cursor = conn.cursor()
@@ -306,8 +307,4 @@ def get_sleeplogs_for_day(user_id,date):
 
     conn.close()
 
-    return sleeps
-
-
-
- '''
+    return sleeps'''

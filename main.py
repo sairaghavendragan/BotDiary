@@ -8,7 +8,8 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     filters,
-    CallbackContext  
+    CallbackContext,
+    CallbackQueryHandler  
 )
 from telegram import Update  
 import handlers  
@@ -75,6 +76,10 @@ def main() -> None:
     application.add_handler(CommandHandler('remind', handlers.set_reminder)) 
     application.add_handler(message_handler) 
     application.add_handler(CommandHandler('summary', handlers.get_specific_summary))
+    application.add_handler(CommandHandler('todo', handlers.add_new_todo))
+    application.add_handler(CommandHandler('todos', handlers.show_daily_todos))
+    application.add_handler(CallbackQueryHandler(handlers.handle_todo_callback))
+
     print("Bot application built. Starting polling...")
 
      
