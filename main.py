@@ -9,7 +9,8 @@ from telegram.ext import (
     MessageHandler,
     filters,
     CallbackContext,
-    CallbackQueryHandler  
+    CallbackQueryHandler,
+    ConversationHandler  
 )
 from telegram import Update  
 import handlers  
@@ -72,13 +73,46 @@ def main() -> None:
     application = Application.builder().token(bot_token).post_init(post_init_callback).build() 
     message_handler = MessageHandler(filters.TEXT & ~ filters.COMMAND, handlers.handle_any_message) 
     logs_handler = CommandHandler('logs', handlers.show_logs)
+    set_reminder_handler = CommandHandler('remind', handlers.set_reminder) 
+    add_todo_handler = CommandHandler('todo', handlers.add_new_todo) 
+    show_todos_handler = CommandHandler('todos', handlers.show_daily_todos) 
+    summary_handler = CommandHandler('summary', handlers.get_specific_summary)
+    
+
+    gemini_conversation_handler = ConversationHandler(
+        entry_points=[CommandHandler("gemini", handlers.start_gemini)],
+        states={
+            handlers.GEMINI_CONVERSATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.continue_gemini_chat),
+            ]
+        },
+        fallbacks=[
+            CommandHandler("endgemini", handlers.end_gemini_conversation),
+            CommandHandler("logs", handlers.end_gemini_conversation), # End chat if other commands are used
+            CommandHandler("remind", handlers.end_gemini_conversation),
+            CommandHandler("todo", handlers.end_gemini_conversation),
+            CommandHandler("todos", handlers.end_gemini_conversation),
+            CommandHandler("summary", handlers.end_gemini_conversation),
+            # Add any other top-level commands here that should exit Gemini chat
+        ],
+        allow_reentry=True # Allows starting new conversations even if already in one
+    )
+
+    application.add_handler(gemini_conversation_handler)
+
+
+
+
+
+
     application.add_handler(logs_handler) 
-    application.add_handler(CommandHandler('remind', handlers.set_reminder)) 
-    application.add_handler(message_handler) 
-    application.add_handler(CommandHandler('summary', handlers.get_specific_summary))
-    application.add_handler(CommandHandler('todo', handlers.add_new_todo))
-    application.add_handler(CommandHandler('todos', handlers.show_daily_todos))
+    application.add_handler(set_reminder_handler)
+    application.add_handler(summary_handler)
+    application.add_handler(add_todo_handler)
+    application.add_handler(show_todos_handler)
     application.add_handler(CallbackQueryHandler(handlers.handle_todo_callback))
+     
+    application.add_handler(message_handler) 
 
     print("Bot application built. Starting polling...")
 

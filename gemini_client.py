@@ -1,5 +1,6 @@
 from google import genai
 from google.genai import types
+from google.genai import chats
 import os
 from dotenv import load_dotenv
 
@@ -22,6 +23,7 @@ SAFETY_SETTINGS = [
 MODEL_NAME = "gemini-2.5-flash"
 
 
+CHAT_MODEL_NAME = "gemini-2.5-flash-lite"
  
 async def get_summary(summary_prompt):
     try:
@@ -60,6 +62,54 @@ def get_summary_prompt(content,summary_date):
     return prompt
 
 
+async def send_single_query_to_gemini(query_content: str) -> str:
+    """
+    Sends a single query to the Gemini chat model without maintaining a session.
+    Uses default safety settings.
+    """
+    try:
+        response = await client.aio.models.generate_content(
+                model=CHAT_MODEL_NAME, # Model name is passed as an argument
+                contents=query_content,
+                config=types.GenerateContentConfig( # Pass settings via the config object
+                    safety_settings=SAFETY_SETTINGS,
+                ),
+            )
+        if hasattr(response,"text") and response.text:
+            return response.text
+        else:
+            print(f"Gemini API: No text content found in response. Raw response: {response}")
+            return "No content generated."
+    except Exception as e:  
+        print(f"Gemini API: An error occurred: {e}")
+        return "No content generated."
+def start_new_gemini_chat() -> chats.AsyncChat:  
+    """
+    Starts a new multi-turn Gemini chat session.
+    """
+    chat = client.aio.chats.create(model=CHAT_MODEL_NAME,config=types.GenerateContentConfig(safety_settings=SAFETY_SETTINGS))
+     
+     
+    return chat
+
+async def send_message_to_gemini_chat(chat_session: chats.AsyncChat, message_content: str) -> str:
+    """
+    Sends a message within an ongoing Gemini chat session and gets the response.
+    """
+    try:
+        response = await chat_session.send_message(
+            message=message_content
+        )
+        if hasattr(response, "text") and response.text:
+            return response.text
+        else:
+            print(f"Gemini API (Multi-turn Chat): No text content found in response. Raw response: {response}")
+            return "No content generated."
+    except Exception as e:
+        print(f"Gemini API (Multi-turn Chat): An error occurred: {e}")
+        # Potentially inspect e to see if it's a blocked content error
+        return "No content generated."
+
 if __name__ == "__main__":
     async def test_summary():
         if not GEMINI_API_KEY:
@@ -80,6 +130,25 @@ if __name__ == "__main__":
         print("\n--- Gemini Response ---")
         summary = await get_summary(test_prompt)
         print(summary)
+    async def test_gemini_chat_interaction():
+        if not GEMINI_API_KEY:
+            print("GEMINI_API_KEY not set. Cannot run test.")
+            return
 
+        print("\n--- Testing Single Query (1.5-flash) ---")
+        single_query_response = await send_single_query_to_gemini("What is the capital of France?")
+        print(f"Response: {single_query_response}")
+
+        print("\n--- Testing Multi-turn Chat (1.5-flash) ---")
+        chat_session = start_new_gemini_chat()
+        print("Chat session started. Sending first message.")
+        response1 = await send_message_to_gemini_chat(chat_session, "Tell me about the history of artificial intelligence.")
+        print(f"Response 1: {response1}")
+
+        print("Sending follow-up message.")
+        response2 = await send_message_to_gemini_chat(chat_session, "What are some of its key milestones?")
+        print(f"Response 2: {response2}")
     import asyncio
     asyncio.run(test_summary())
+    asyncio.sleep(2)
+    asyncio.run(test_gemini_chat_interaction())
