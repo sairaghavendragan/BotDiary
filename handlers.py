@@ -10,6 +10,10 @@ import scheduler
 import pytz 
 import utils
 import gemini_client   
+from functools import wraps
+import os
+
+
 
 # Define states for the ConversationHandler
 GEMINI_CONVERSATION = 0 # State for ongoing Gemini chat
@@ -17,6 +21,19 @@ GEMINI_CONVERSATION = 0 # State for ongoing Gemini chat
  
 TIMEZONE = utils.TIMEZONE 
 tz = utils.tz
+
+ALLOWED_CHAT_ID = os.getenv('ALLOWED_CHAT_ID') 
+def restricted_access(func):
+    @wraps(func)
+    async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        chat_id = update.effective_chat.id
+        if ALLOWED_CHAT_ID and str(chat_id) != ALLOWED_CHAT_ID: 
+            print(f"Unauthorized access denied for chat ID: {chat_id}")
+            return  
+        return await func(update, context, *args, **kwargs)
+    return wrapped
+
+@restricted_access
 async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id 
     content = update.message.text
@@ -35,7 +52,7 @@ async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     The database interactions (`db.get_or_create_user`, `db.log_message`) are synchronous blocking calls 
     but are quick enough not to significantly block the event loop in typical scenarios.
 '''    
-
+@restricted_access
 async def show_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     user_id = db.get_or_create_user(chat_id)
@@ -83,7 +100,7 @@ async def show_logs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     It includes error handling for parsing timestamp strings from the database.
 '''
 
-
+@restricted_access
 async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     user_id = db.get_or_create_user(chat_id)
@@ -143,7 +160,7 @@ async def set_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
    -- Finally, it sends a confirmation message back to the user using `await update.message.reply_text()`.
      
 '''    
-
+@restricted_access
 async def get_specific_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id  = update.message.chat_id
     user_id = db.get_or_create_user(chat_id)
@@ -171,6 +188,7 @@ async def get_specific_summary(update: Update, context: ContextTypes.DEFAULT_TYP
         return 
     await update.message.reply_text(summary['content'],parse_mode='Markdown')
 
+@restricted_access
 async def add_new_todo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     user_id = db.get_or_create_user(chat_id)
@@ -222,7 +240,7 @@ def _get_formatted_todos_content(user_id: int) -> tuple[str, InlineKeyboardMarku
 
 
 
-
+@restricted_access
 async def _send_or_edit_todos(update: Update,context: ContextTypes.DEFAULT_TYPE, message_id: int=None) -> None:
      
     if update.message:
@@ -246,11 +264,14 @@ async def _send_or_edit_todos(update: Update,context: ContextTypes.DEFAULT_TYPE,
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
+@restricted_access      
 async def show_daily_todos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
      
      
     await _send_or_edit_todos(update, context)        
 
+ 
+@restricted_access
 async def handle_todo_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer() # Acknowledge the callback query
@@ -281,6 +302,7 @@ async def handle_todo_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     # After modification, re-render the TODO list by editing the original message
     await _send_or_edit_todos(update,context, message_id)
 
+@restricted_access
 async def start_gemini(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Entry point for the /gemini command.
@@ -321,6 +343,7 @@ async def start_gemini(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         )
         return GEMINI_CONVERSATION # Transition to the conversation state
 
+@restricted_access
 async def continue_gemini_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Handles messages during an ongoing Gemini chat session.
@@ -351,6 +374,7 @@ async def continue_gemini_chat(update: Update, context: ContextTypes.DEFAULT_TYP
     
     return GEMINI_CONVERSATION # Stay in the conversation state
 
+@restricted_access
 async def end_gemini_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Ends the Gemini multi-turn conversation.
